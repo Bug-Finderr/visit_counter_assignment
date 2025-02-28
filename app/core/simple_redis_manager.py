@@ -16,4 +16,4 @@ class RedisManager:
 
     def get(self, page_id: str) -> int:
         count = self.redis_client.hget("visit_count", page_id)  # type: ignore
-        return int(count) if count is not None else 0
+        return int(count) if count else 0
