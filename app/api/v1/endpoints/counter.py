@@ -2,7 +2,8 @@ from fastapi import APIRouter, HTTPException, Depends
 
 # from app.services.in_memory_couter import VisitCounterService
 # from app.services.simple_redis_counter import VisitCounterService
-from app.services.application_layer_cached_visit_counter import VisitCounterService
+# from app.services.application_layer_cached_visit_counter import VisitCounterService
+from app.services.batched_write_visit_counter import VisitCounterService
 from app.schemas.counter import VisitCount
 
 router = APIRouter()
@@ -35,7 +36,7 @@ async def get_visits(
     try:
         count = await counter_service.get_visit_count(page_id)
         # return VisitCount(visits=count, served_via="in_memory")
-        # return VisitCount(visits=count, served_via="redis")
-        return VisitCount(visits=count, served_via=counter_service.get_served_via())
+        return VisitCount(visits=count, served_via="redis")
+        # return VisitCount(visits=count, served_via=counter_service.get_served_via())
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
