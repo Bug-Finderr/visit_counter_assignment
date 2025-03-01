@@ -1,7 +1,7 @@
 from typing import Dict, List, Any
 import asyncio
 from datetime import datetime
-from ..core.redis_manager import RedisManager
+from app.core.redis_manager_template import RedisManager
 
 
 class VisitCounterService:
