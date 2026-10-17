@@ -1,0 +1,99 @@
+name: ci
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  IMAGE: ghcr.io/bug-finderr/vcounter:${{ github.sha }}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      redis1:
+        image: redis:7
+        ports: ["7070:6379"]
+      redis2:
+        image: redis:7
+        ports: ["7071:6379"]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+      - run: pip install -r requirements-dev.txt
+      - run: ruff check .
+      # localhost and 127.0.0.1 are different ring nodes, so both containers get used
+      - run: pytest -v -m "not slow"
+        env:
+          PYTEST_RUNNING: "1"
+          REDIS_NODES: redis://localhost:7070,redis://127.0.0.1:7071
+      - name: secret scan
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scanners: secret
+          exit-code: "1"
+
+  image:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+      - run: docker build --build-arg GIT_SHA=${{ github.sha }} -t $IMAGE .
+      - name: image scan
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ env.IMAGE }}
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+      - name: push
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+          docker push $IMAGE
+          echo "digest: $(docker inspect --format '{{index .RepoDigests 0}}' $IMAGE)" | tee "$GITHUB_STEP_SUMMARY"
+
+  # install chart with pushed image and walk user journey
+  deploy-test:
+    needs: image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: helm/kind-action@v1
+      - name: load pushed image
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+          docker pull $IMAGE
+          kind load docker-image $IMAGE --name chart-testing
+      - name: deploy
+        run: |
+          kubectl apply -f k8s/namespace.yaml
+          kubectl -n visit-counter create secret generic visit-counter-redis --from-literal=password=$(openssl rand -hex 24)
+          helm install visit-counter chart -n visit-counter --set image.tag=${{ github.sha }} --wait --timeout 3m
+      - name: user journey
+        run: |
+          kubectl run journey --rm -i --restart=Never --image=busybox:1.37 -- sh -c '
+            set -e
+            S=http://visit-counter.visit-counter.svc
+            wget -qO- $S/version | grep ${{ github.sha }}
+            wget -qO- --post-data= $S/api/v1/counter/visit/ci
+            wget -qO- $S/api/v1/counter/visits/ci | grep "\"visits\":1"
+            # network policy: only app may reach redis, so this must time out
+            if nc -w 3 -z visit-counter-redis-0.visit-counter-redis.visit-counter.svc 6379; then exit 1; fi
+          '
+      - name: debug info
+        if: failure()
+        run: kubectl -n visit-counter get pods,events -o wide
