@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     # Application Configuration
     DEBUG: bool = True
     API_PREFIX: str = "/api/v1"
+    GIT_SHA: str = "dev"
 
     model_config = {
         "env_file": ".env",
