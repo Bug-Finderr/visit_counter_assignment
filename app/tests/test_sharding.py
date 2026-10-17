@@ -75,7 +75,8 @@ async def test_increment_and_get(visit_counter_service):
         assert updated_count == initial_count + 5
 
         # Verify served_via shows correct Redis instance
-        served_via = visit_counter_service.get_served_via()
+        node = visit_counter_service.redis_manager.get_node_for_key(page_id)
+        assert visit_counter_service.get_served_via() in node
     except ConnectionError as e:
         pytest.skip(f"Redis connection failed: {e}")
 
