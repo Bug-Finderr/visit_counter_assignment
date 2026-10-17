@@ -1,0 +1,23 @@
+{{- if .Values.ingress.enabled }}
+# tls ends at the ingress controller, inside the cluster it is plain http
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: visit-counter
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts: [{{ .Values.ingress.host }}]
+      secretName: visit-counter-tls
+  rules:
+    - host: {{ .Values.ingress.host }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: visit-counter
+                port:
+                  name: http
+{{- end }}

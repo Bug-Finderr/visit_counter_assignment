@@ -1,0 +1,48 @@
+{{- if .Values.monitoring.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: visit-counter
+spec:
+  selector:
+    matchLabels:
+      app: visit-counter
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: visit-counter
+spec:
+  groups:
+    - name: visit-counter
+      rules:
+        - alert: VisitCounterFailing
+          expr: |
+            sum(rate(http_requests_total{job="visit-counter", handler=~"/api/v1/counter/.*", status="5xx"}[5m]))
+            / sum(rate(http_requests_total{job="visit-counter", handler=~"/api/v1/counter/.*"}[5m])) > 0.05
+          for: 5m
+          labels:
+            severity: page
+          annotations:
+            summary: visit requests are failing, check /readyz to see which redis shard is down
+        # p95 latency
+        - alert: VisitCounterSlow
+          expr: |
+            histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket{job="visit-counter", handler=~"/api/v1/counter/.*"}[10m]))) > 0.5
+          for: 10m
+          labels:
+            severity: ticket
+          annotations:
+            summary: p95 latency is above 500ms for the visit endpoints
+        - alert: VisitCounterNoPodsReady
+          expr: kube_deployment_status_replicas_available{namespace="{{ .Release.Namespace }}", deployment="visit-counter"} == 0
+          for: 5m
+          labels:
+            severity: page
+          annotations:
+            summary: no visit-counter pod is ready, check kubectl describe pod and helm history
+{{- end }}
