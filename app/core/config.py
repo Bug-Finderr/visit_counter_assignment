@@ -1,6 +1,4 @@
 from pydantic_settings import BaseSettings
-from pydantic import model_validator
-import os
 
 
 class Settings(BaseSettings):
