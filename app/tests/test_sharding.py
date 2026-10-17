@@ -135,6 +135,7 @@ async def test_load(redis_manager):
 
 
 # Additional heavy load test: simulate a high number of concurrent increments
+@pytest.mark.slow
 @pytest.mark.asyncio
 async def test_heavy_load(redis_manager):
     test_key = "heavy_load_test_page"
