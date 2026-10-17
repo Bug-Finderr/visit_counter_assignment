@@ -11,7 +11,8 @@ class Settings(BaseSettings):
     REDIS_DB: int = 0
 
     # Consistent Hashing Configuration
-    VIRTUAL_NODES: int = 100
+    # keep in sync with the .env the deployments were set up with
+    VIRTUAL_NODES: int = 200
 
     # Batch Processing Configuration
     BATCH_INTERVAL_SECONDS: float = 5.0
