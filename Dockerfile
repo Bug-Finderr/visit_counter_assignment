@@ -5,7 +5,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 OTEL_TRACES_EXPORTER=none OTEL_
 WORKDIR /app
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# setuptools ships old copies of wheel/jaraco, pip vendors old msgpack/urllib3; nothing is installed at runtime
+RUN pip install --no-cache-dir -r requirements.txt && pip uninstall -y setuptools wheel pip
 
 COPY app ./app
 
