@@ -8,7 +8,7 @@ permissions:
   contents: read
 
 env:
-  IMAGE: ghcr.io/bug-finderr/vcounter:${{ github.sha }}
+  IMAGE: ghcr.io/bug-finderr/visit-counter:${{ github.sha }}
 
 jobs:
   test:

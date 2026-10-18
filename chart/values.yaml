@@ -1,5 +1,5 @@
 image:
-  repository: ghcr.io/bug-finderr/vcounter
+  repository: ghcr.io/bug-finderr/visit-counter
   # commit sha from CI
   tag: ""
 

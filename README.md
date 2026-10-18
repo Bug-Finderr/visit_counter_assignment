@@ -69,7 +69,7 @@ kubectl -n visit-counter create secret generic visit-counter-redis \
 helm install visit-counter chart -n visit-counter --set image.tag=<commit-sha> --wait
 ```
 
-The image is built and pushed to `ghcr.io/bug-finderr/vcounter` by commit SHA from CI, so `image.tag` is a real commit from a green run. Extra flags: `--set monitoring.enabled=true` (Prometheus + alerts), `--set tracing.enabled=true` (Jaeger), `--set ingress.enabled=true` (HTTPS). The optional pieces themselves (monitoring values, Jaeger, TLS secret setup) are in `k8s/`.
+The image is built and pushed to `ghcr.io/bug-finderr/visit-counter` by commit SHA from CI, so `image.tag` is a real commit from a green run. Extra flags: `--set monitoring.enabled=true` (Prometheus + alerts), `--set tracing.enabled=true` (Jaeger), `--set ingress.enabled=true` (HTTPS). The optional pieces themselves (monitoring values, Jaeger, TLS secret setup) are in `k8s/`.
 
 CI (`.github/workflows/ci.yml`) runs on every push: lint + tests + secret scan, then image build + CVE scan + push, then a kind cluster installs the chart with that exact image and runs a smoke test.
 
