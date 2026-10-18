@@ -7,7 +7,6 @@ from .config import settings
 
 class RedisManager:
     def __init__(self):
-        """Initialize Redis connection pools and consistent hashing"""
         self.connection_pools: Dict[str, redis.ConnectionPool] = {}
         self.redis_clients: Dict[str, redis.Redis] = {}
 
@@ -19,36 +18,22 @@ class RedisManager:
 
         for node in redis_nodes:
             self.connection_pools[node] = redis.ConnectionPool.from_url(
-                node, password=settings.REDIS_PASSWORD, db=settings.REDIS_DB
+                node,
+                password=settings.REDIS_PASSWORD,
+                db=settings.REDIS_DB,
+                # stuck shard is treated as down instead of hanging the request
+                socket_timeout=0.5,
+                socket_connect_timeout=0.5,
             )
-            self.redis_clients[node] = redis.Redis(
-                connection_pool=self.connection_pools[node]
-            )
+            self.redis_clients[node] = redis.Redis(connection_pool=self.connection_pools[node])
 
     async def get_connection(self, key: str) -> redis.Redis:
-        """
-        Get Redis connection for the given key using consistent hashing
-
-        Args:
-            key: The key to determine which Redis node to use
-
-        Returns:
-            Redis client for the appropriate node
-        """
+        """Get the client that owns this key"""
         node = self.consistent_hash.get_node(key)
         return self.redis_clients[node]
 
     async def increment(self, key: str, amount: int = 1) -> int:
-        """
-        Increment a counter in Redis
-
-        Args:
-            key: The key to increment
-            amount: Amount to increment by
-
-        Returns:
-            New value of the counter
-        """
+        """HINCRBY, retried over the timeout window"""
         client = await self.get_connection(key)
 
         max_retries = 3
@@ -56,24 +41,16 @@ class RedisManager:
 
         for attempt in range(max_retries):
             try:
-                return client.hincrby("visit_count", key, amount)  # type: ignore
-            except Exception as e:
+                return await asyncio.to_thread(client.hincrby, "visit_count", key, amount)
+            except redis.RedisError:
                 if attempt == max_retries - 1:
-                    raise e
+                    raise
                 await asyncio.sleep(retry_delay * (2**attempt))
 
         return 0
 
     async def get(self, key: str) -> Optional[int]:
-        """
-        Get value for a key from Redis
-
-        Args:
-            key: The key to get
-
-        Returns:
-            Value of the key or None if not found
-        """
+        """HGET, returns the count or 0 when the key is new"""
         client = await self.get_connection(key)
 
         max_retries = 3
@@ -81,15 +58,24 @@ class RedisManager:
 
         for attempt in range(max_retries):
             try:
-                value = client.hget("visit_count", key)
-                return int(value) if value else 0  # type: ignore
-            except Exception as e:
+                value = await asyncio.to_thread(client.hget, "visit_count", key)
+                return int(value) if value else 0
+            except redis.RedisError:
                 if attempt == max_retries - 1:
-                    raise e
+                    raise
                 await asyncio.sleep(retry_delay * (2**attempt))
 
         return 0
 
     def get_node_for_key(self, key: str) -> str:
-        """Get the Redis node that handles this key"""
+        """Node url the hash ring maps this key to"""
         return self.consistent_hash.get_node(key)
+
+    def unreachable_nodes(self) -> List[str]:
+        down = []
+        for node, client in self.redis_clients.items():
+            try:
+                client.ping()
+            except redis.RedisError:
+                down.append(node)
+        return down

@@ -55,6 +55,26 @@ curl --location --request POST 'http://localhost:8000/api/v1/counter/visit/123'
 curl --location 'http://localhost:8000/api/v1/counter/visits/123'
 ```
 
+## Kubernetes Deployment (Helm)
+
+The `chart/` directory packages the app and its two Redis shards for Kubernetes, tested on minikube.
+
+```bash
+minikube start --cni=calico --cpus=4 --memory=6g
+
+kubectl apply -f k8s/namespace.yaml
+kubectl -n visit-counter create secret generic visit-counter-redis \
+  --from-literal=password="$(openssl rand -hex 24)"
+
+helm install visit-counter chart -n visit-counter --set image.tag=<commit-sha> --wait
+```
+
+The image is built and pushed to `ghcr.io/bug-finderr/visit-counter` by commit SHA from CI, so `image.tag` is a real commit from a green run. Extra flags: `--set monitoring.enabled=true` (Prometheus + alerts), `--set tracing.enabled=true` (Jaeger), `--set ingress.enabled=true` (HTTPS). The optional pieces themselves (monitoring values, Jaeger, TLS secret setup) are in `k8s/`.
+
+CI (`.github/workflows/ci.yml`) runs on every push: lint + tests + secret scan, then image build + CVE scan + push, then a kind cluster installs the chart with that exact image and runs a smoke test.
+
+Alerts (in `chart/templates/monitoring.yaml`): more than 5% of visit requests failing for 5 minutes, p95 latency above 500ms for 10 minutes, or no pods ready for 5 minutes. The SLO behind them: under 0.5% failed requests and p95 under 100ms for the visit endpoints.
+
 ## Implementation Tasks
 
 ### Task 1: Basic Visit Counter (48500f)
@@ -118,34 +138,20 @@ git checkout 794fe7
 docker-compose up --build
 ```
 
-**Expected Behavior**: Visit counts are distributed across multiple Redis instances based on the page_id. Responses show which Redis instance served the data (e.g., `served_via: "redis_7070"` or `served_via: "redis_7071"`).
+**Expected Behavior**: Visit counts are distributed across multiple Redis instances based on the page_id. Responses show which Redis instance served the data (e.g., `served_via: "redis1"` or `served_via: "redis2"`).
 
 **Automated Testing**:
 
 ```bash
 # Run the load tests and verify sharding functionality
-docker-compose exec app pytest -v
+docker-compose up -d redis1 redis2
+pip install -r requirements-dev.txt
+PYTEST_RUNNING=1 REDIS_NODES=redis://localhost:7070,redis://127.0.0.1:7071 pytest -v -m "not slow"
 ```
 
 The automated tests verify consistent hashing functionality, key distribution, and system performance under load (including a heavy load test with 50,000 requests).
 
 <br/>
-
-## File Structure
-
-```md
-.
-├── app/
-│   ├── api/v1/          # API routes and endpoints
-│   ├── core/            # Core functionality
-│   ├── schemas/         # Data models
-│   ├── services/        # Service implementations for each task
-│   ├── tests/           # Automated tests
-│   └── main.py          # Application entry point
-├── docker-compose.yml   # Docker configuration
-├── Dockerfile           # Container build definition
-└── requirements.txt     # Python dependencies
-```
 
 ## Credits
 

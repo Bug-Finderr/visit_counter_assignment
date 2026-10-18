@@ -1,18 +1,17 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, Depends
 
-# from app.services.in_memory_couter import VisitCounterService
-# from app.services.simple_redis_counter import VisitCounterService
-# from app.services.application_layer_cached_visit_counter import VisitCounterService
-# from app.services.batched_write_visit_counter import VisitCounterService
 from app.services.sharded_visit_counter import VisitCounterService
+from app.core.sharded_redis_manager import RedisManager
 from app.schemas.counter import VisitCount
 
 router = APIRouter()
 
+# one pool per shard for the whole process, not per request
+redis_manager = RedisManager()
 
-# Dependency to get VisitCounterService instance
+
 def get_visit_counter_service():
-    return VisitCounterService()
+    return VisitCounterService(redis_manager)
 
 
 @router.post("/visit/{page_id}")
@@ -21,11 +20,8 @@ async def record_visit(
     counter_service: VisitCounterService = Depends(get_visit_counter_service),
 ):
     """Record a visit for a website"""
-    try:
-        await counter_service.increment_visit(page_id)
-        return {"status": "success", "message": f"Visit recorded for page {page_id}"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    await counter_service.increment_visit(page_id)
+    return {"status": "success", "message": f"Visit recorded for page {page_id}"}
 
 
 @router.get("/visits/{page_id}", response_model=VisitCount)
@@ -34,10 +30,5 @@ async def get_visits(
     counter_service: VisitCounterService = Depends(get_visit_counter_service),
 ):
     """Get visit count for a website"""
-    try:
-        count = await counter_service.get_visit_count(page_id)
-        # return VisitCount(visits=count, served_via="in_memory")
-        # return VisitCount(visits=count, served_via="redis")
-        return VisitCount(visits=count, served_via=counter_service.get_served_via())
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    count = await counter_service.get_visit_count(page_id)
+    return VisitCount(visits=count, served_via=counter_service.get_served_via())

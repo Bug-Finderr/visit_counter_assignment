@@ -1,0 +1,14 @@
+# values for prometheus-community/kube-prometheus-stack
+prometheus:
+  prometheusSpec:
+    # pick up ServiceMonitors and rules from any release, not just the stack itself
+    serviceMonitorSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+
+# minikube binds these to localhost, scraping them only gives TargetDown alerts
+kubeEtcd:
+  enabled: false
+kubeControllerManager:
+  enabled: false
+kubeScheduler:
+  enabled: false

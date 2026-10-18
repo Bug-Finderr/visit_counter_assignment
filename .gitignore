@@ -34,3 +34,7 @@ archive.zip
 # Environment
 .env*
 .venv
+
+# ingress test certs
+tls.key
+tls.crt

@@ -1,6 +1,4 @@
 from pydantic_settings import BaseSettings
-from pydantic import model_validator
-import os
 
 
 class Settings(BaseSettings):
@@ -11,7 +9,8 @@ class Settings(BaseSettings):
     REDIS_DB: int = 0
 
     # Consistent Hashing Configuration
-    VIRTUAL_NODES: int = 100
+    # keep in sync with the .env the deployments were set up with
+    VIRTUAL_NODES: int = 200
 
     # Batch Processing Configuration
     BATCH_INTERVAL_SECONDS: float = 5.0
@@ -19,6 +18,7 @@ class Settings(BaseSettings):
     # Application Configuration
     DEBUG: bool = True
     API_PREFIX: str = "/api/v1"
+    GIT_SHA: str = "dev"
 
     model_config = {
         "env_file": ".env",

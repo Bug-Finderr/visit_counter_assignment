@@ -1,0 +1,84 @@
+# headless service so each shard keeps a stable name for the hash ring
+apiVersion: v1
+kind: Service
+metadata:
+  name: visit-counter-redis
+spec:
+  clusterIP: None
+  selector:
+    app: visit-counter-redis
+  ports:
+    - name: redis
+      port: 6379
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: visit-counter-redis
+spec:
+  serviceName: visit-counter-redis
+  replicas: {{ .Values.redis.shards }}
+  # shards are independent, no point starting them one by one
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels:
+      app: visit-counter-redis
+  template:
+    metadata:
+      labels:
+        app: visit-counter-redis
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: redis
+          image: {{ .Values.redis.image }}
+          command: ["sh", "-c", 'exec redis-server --dir /data --appendonly yes --requirepass "$REDIS_PASSWORD"']
+          env:
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.redis.passwordSecret }}
+                  key: password
+            # keeps the password out of the probe command
+            - name: REDISCLI_AUTH
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.redis.passwordSecret }}
+                  key: password
+          ports:
+            - name: redis
+              containerPort: 6379
+          readinessProbe:
+            exec:
+              # -e matters: a plain ping exits 0 even on a NOAUTH error reply
+              command: ["redis-cli", "-e", "ping"]
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: redis
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.redis.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: data
+              mountPath: /data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: {{ .Values.redis.storage }}

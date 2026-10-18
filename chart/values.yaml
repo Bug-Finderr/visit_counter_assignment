@@ -1,0 +1,39 @@
+image:
+  repository: ghcr.io/bug-finderr/visit-counter
+  # commit sha from CI
+  tag: ""
+
+replicas: 2
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    memory: 256Mi
+
+redis:
+  image: redis:7
+  shards: 2
+  storage: 1Gi
+  # the password secret is created by hand, helm only references it
+  passwordSecret: visit-counter-redis
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      memory: 256Mi
+
+# minikube needs `minikube addons enable ingress` plus a tls secret
+ingress:
+  enabled: false
+  host: visit-counter.local
+
+# need the extra pieces from k8s/ first
+monitoring:
+  enabled: false
+
+tracing:
+  enabled: false
+  endpoint: http://jaeger.monitoring:4318
