@@ -24,12 +24,14 @@ async def healthz():
     return {"status": "ok"}
 
 
-# ready while at least 1 shard answers. 1 shard down hits every pod the same way, pulling pods out would turn a partial outage into a full one
+# ready while at least 1 shard answers. 1 shard down hits every pod the same
+# way, pulling pods out would turn a partial outage into a full one
 @app.get("/readyz")
 def readyz(response: Response):
     down = redis_manager.unreachable_nodes()
     ready = len(down) < len(redis_manager.redis_clients)
-    if not ready: response.status_code = 503
+    if not ready:
+        response.status_code = 503
     return {"ready": ready, "down": down}
 
 
